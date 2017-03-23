@@ -156,21 +156,22 @@ void matrix_mult_strassen(int* a, int* b, size_t sz, int* c, unsigned cp) {
 
 // fills square matrices a and b (of dimension sz) with random integer values
 // depending on flag. writes matrices to a file if write_file is 1
-void fill_rand_matrices(int* a, int* b, size_t sz, int flag, int write_file) {
+void fill_rand_matrices(int* a, int* b, size_t sz, size_t padded_sz,
+                        int flag, int write_file) {
     for (size_t i = 0; i < sz; i++) {
         for (size_t j = 0; j < sz; j++) {
             if (flag == 0) {
                 // random integer 0 or 1
-                *me(a, sz, i, j) = rand() % 2;
-                *me(b, sz, i, j) = rand() % 2;
+                *me(a, padded_sz, i, j) = rand() % 2;
+                *me(b, padded_sz, i, j) = rand() % 2;
             } else if (flag == 1) {
                 // random integer 0, 1, or 2
-                *me(a, sz, i, j) = rand() % 3;
-                *me(b, sz, i, j) = rand() % 3;
+                *me(a, padded_sz, i, j) = rand() % 3;
+                *me(b, padded_sz, i, j) = rand() % 3;
             } else if (flag == 2) {
                 // random integer 0, 1, or -1
-                *me(a, sz, i, j) = (rand() % 3) - 1;
-                *me(b, sz, i, j) = (rand() % 3) - 1;
+                *me(a, padded_sz, i, j) = (rand() % 3) - 1;
+                *me(b, padded_sz, i, j) = (rand() % 3) - 1;
             }
         }
     }
@@ -180,47 +181,48 @@ void fill_rand_matrices(int* a, int* b, size_t sz, int flag, int write_file) {
         // write matrix a to file
         for (size_t i = 0; i < sz; i++) {
             for (size_t j = 0; j < sz; j++) {
-                fout << *me(a, sz, i, j) << endl;
+                fout << *me(a, padded_sz, i, j) << endl;
             }
         }
         // write matrix b to file
         for (size_t i = 0; i < sz; i++) {
             for (size_t j = 0; j < sz; j++) {
-                fout << *me(b, sz, i, j) << endl;
+                fout << *me(b, padded_sz, i, j) << endl;
             }
         }
     }
 }
 
 // reads square matrices a and b (of dimension sz) from an input file
-void read_matrices_from_file(char* file, size_t sz, int* a, int* b) {
+void read_matrices_from_file(char* file, size_t sz, size_t padded_sz,
+                             int* a, int* b) {
     ifstream fin (file);
     // read matrix a from file
     for (size_t i = 0; i < sz; i++) {
         for (size_t j = 0; j < sz; j++) {
-            fin >> *me(a, sz, i, j);
+            fin >> *me(a, padded_sz, i, j);
         }
     }
     // read matrix b from file
     for (size_t i = 0; i < sz; i++) {
         for (size_t j = 0; j < sz; j++) {
-            fin >> *me(b, sz, i, j);
+            fin >> *me(b, padded_sz, i, j);
         }
     }
 }
 
 int padding(int dim, int cp) {
     int i = 0;
-    float n = dim *1.;
-    while(n > cp) { 
+    float n = dim * 1.;
+    while (n > cp) {
         i++;
-        n = n/2;
+        n = n / 2;
     }
     int j = ceil(n);
-    for(int k =0; k < i; k++){
+    for (int k = 0; k < i; k++){
         j = j * 2;
     }
-    return j; 
+    return j;
 }
 
 int main(int argc, char *argv[]) {
@@ -237,8 +239,8 @@ int main(int argc, char *argv[]) {
         input_file = argv[3];
     }
 
-    int cp;
-    int padded_dim = padding(dim, cp); 
+    int cp = 64;
+    int padded_dim = padding(dim, cp);
 
     // allocate matrices
     int* a = (int*) calloc(padded_dim * padded_dim, sizeof(int));
@@ -247,16 +249,20 @@ int main(int argc, char *argv[]) {
 
     // populate matrices
     if (input_file) {
-        read_matrices_from_file(input_file, padded_dim, a, b);
+        read_matrices_from_file(input_file, dim, padded_dim, a, b);
     } else {
-        fill_rand_matrices(a, b, padded_dim, flag, 1);
+        fill_rand_matrices(a, b, dim, padded_dim, flag, 1);
     }
 
     // multiply matrices and print diagonal of result
-    matrix_mult_strassen(a, b, dim, c, 64);
-    for (int i = 0; i < padded_dim; i++) {
+    clock_t t = clock();
+    matrix_mult_strassen(a, b, padded_dim, c, cp);
+    // matrix_mult_naive_optimized(a, b, padded_dim, c);
+    t = clock() - t;
+    for (int i = 0; i < dim; i++) {
         cout << *me(c, padded_dim, i, i) << endl;
     }
+    cout << ((float) t) / CLOCKS_PER_SEC << " seconds" << endl;
 
     // free matrices
     free(a);
@@ -265,4 +271,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
