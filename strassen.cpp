@@ -1,6 +1,10 @@
 #include <iostream>
 #include <fstream>
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
 using namespace std;
 
 // returns a pointer to matrix element m[i][j]
@@ -60,7 +64,7 @@ void matrix_subtract(int* a, int row_a, int col_a, size_t sz_a,
 
 // strassen's matrix multiplication algorithm with crossover to naive algorithm
 // when matrices are of size cp or smaller
-void matrix_mult_strassen(int* a, int* b, size_t sz, int* c, int cp) {
+void matrix_mult_strassen(int* a, int* b, size_t sz, int* c, unsigned cp) {
     if (sz <= cp) {
         // use optimized naive implementation
         matrix_mult_naive_optimized(a, b, sz, c);
@@ -205,6 +209,20 @@ void read_matrices_from_file(char* file, size_t sz, int* a, int* b) {
     }
 }
 
+int padding(int dim, int cp) {
+    int i = 0;
+    float n = dim *1.;
+    while(n > cp) { 
+        i++;
+        n = n/2;
+    }
+    int j = ceil(n);
+    for(int k =0; k < i; k++){
+        j = j * 2;
+    }
+    return j; 
+}
+
 int main(int argc, char *argv[]) {
     srand(time(0));
     if (argc != 4 && argc != 3) {
@@ -212,29 +230,32 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    int flag = stoi(argv[1]);
-    int dim = stoi(argv[2]);
+    int flag = atoi(argv[1]);
+    int dim = atoi(argv[2]);
     char* input_file = NULL;
     if (argc == 4) {
         input_file = argv[3];
     }
 
+    int cp;
+    int padded_dim = padding(dim, cp); 
+
     // allocate matrices
-    int* a = (int*) calloc(dim * dim, sizeof(int));
-    int* b = (int*) calloc(dim * dim, sizeof(int));
-    int* c = (int*) calloc(dim * dim, sizeof(int));
+    int* a = (int*) calloc(padded_dim * padded_dim, sizeof(int));
+    int* b = (int*) calloc(padded_dim * padded_dim, sizeof(int));
+    int* c = (int*) calloc(padded_dim * padded_dim, sizeof(int));
 
     // populate matrices
     if (input_file) {
-        read_matrices_from_file(input_file, dim, a, b);
+        read_matrices_from_file(input_file, padded_dim, a, b);
     } else {
-        fill_rand_matrices(a, b, dim, flag, 1);
+        fill_rand_matrices(a, b, padded_dim, flag, 1);
     }
 
     // multiply matrices and print diagonal of result
     matrix_mult_strassen(a, b, dim, c, 64);
-    for (int i = 0; i < dim; i++) {
-        cout << *me(c, dim, i, i) << endl;
+    for (int i = 0; i < padded_dim; i++) {
+        cout << *me(c, padded_dim, i, i) << endl;
     }
 
     // free matrices
@@ -244,3 +265,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
