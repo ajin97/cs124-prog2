@@ -11,6 +11,7 @@ static inline int* me(int* m, size_t sz, size_t i, size_t j) {
 // naive O(n^3) matrix multiplication algorithm. computes a x b and stores
 // the result in c
 void matrix_mult_naive(int* a, int* b, size_t sz, int* c) {
+    memset(c, 0, sz * sz * sizeof(int));
     for (size_t i = 0; i < sz; i++) {
         for (size_t j = 0; j < sz; j++) {
             for (size_t k = 0; k < sz; k++) {
@@ -23,6 +24,7 @@ void matrix_mult_naive(int* a, int* b, size_t sz, int* c) {
 // naive O(n^3) matrix multiplication algorithm with optimization for cache
 // alignment. computes a x b and stores the result in c
 void matrix_mult_naive_optimized(int* a, int* b, size_t sz, int* c) {
+    memset(c, 0, sz * sz * sizeof(int));
     for (size_t i = 0; i < sz; i++) {
         for (size_t k = 0; k < sz; k++) {
             for (size_t j = 0; j < sz; j++) {
@@ -32,10 +34,120 @@ void matrix_mult_naive_optimized(int* a, int* b, size_t sz, int* c) {
     }
 }
 
+// adds specified portion of matrix b to whatever is in specified portion
+// of matrix a (i.e. a += b)
+void matrix_add(int* a, int row_a, int col_a, size_t sz_a,
+                int* b, int row_b, int col_b, size_t sz_b, size_t sz) {
+    for (size_t i = 0; i < sz; i++) {
+        for (size_t j = 0; j < sz; j++) {
+            *me(a, sz_a, row_a + i, col_a + j) +=
+                *me(b, sz_b, row_b + i, col_b + j);
+        }
+    }
+}
+
+// subtracts specified portion of matrix b from whatever is in specified
+// portion of matrix a (i.e. a -= b)
+void matrix_subtract(int* a, int row_a, int col_a, size_t sz_a,
+                     int* b, int row_b, int col_b, size_t sz_b, size_t sz) {
+    for (size_t i = 0; i < sz; i++) {
+        for (size_t j = 0; j < sz; j++) {
+            *me(a, sz_a, row_a + i, col_a + j) -=
+                *me(b, sz_b, row_b + i, col_b + j);
+        }
+    }
+}
+
 // strassen's matrix multiplication algorithm with crossover to naive algorithm
 // when matrices are of size cp or smaller
 void matrix_mult_strassen(int* a, int* b, size_t sz, int* c, int cp) {
+    if (sz <= cp) {
+        // use optimized naive implementation
+        matrix_mult_naive_optimized(a, b, sz, c);
+    } else {
+        // strassen's algorithm
+        memset(c, 0, sz * sz * sizeof(int));
+        size_t new_sz = sz / 2;
 
+        // allocate three temporary square matrices of dimension new_sz
+        int* temp1 = (int*) calloc(new_sz * new_sz, sizeof(int));
+        int* temp2 = (int*) calloc(new_sz * new_sz, sizeof(int));
+        int* temp3 = (int*) calloc(new_sz * new_sz, sizeof(int));
+
+        // M1
+        matrix_add(temp1, 0, 0, new_sz, a, 0, 0, sz, new_sz); // temp1 += A_11
+        matrix_add(temp1, 0, 0, new_sz, a, new_sz, new_sz, sz, new_sz); // temp1 += A_22
+        matrix_add(temp2, 0, 0, new_sz, b, 0, 0, sz, new_sz); // temp2 += B_11
+        matrix_add(temp2, 0, 0, new_sz, b, new_sz, new_sz, sz, new_sz); // temp2 += B_22
+        matrix_mult_strassen(temp1, temp2, new_sz, temp3, cp); // temp3 = temp1 * temp2
+        matrix_add(c, 0, 0, sz, temp3, 0, 0, new_sz, new_sz); // C_11 += temp3
+        matrix_add(c, new_sz, new_sz, sz, temp3, 0, 0, new_sz, new_sz); // C_22 += temp3
+
+        // M2
+        memset(temp1, 0, new_sz * new_sz * sizeof(int));
+        memset(temp2, 0, new_sz * new_sz * sizeof(int));
+        matrix_add(temp1, 0, 0, new_sz, a, new_sz, 0, sz, new_sz); // temp1 += A_21
+        matrix_add(temp1, 0, 0, new_sz, a, new_sz, new_sz, sz, new_sz); // temp1 += A_22
+        matrix_add(temp2, 0, 0, new_sz, b, 0, 0, sz, new_sz); // temp2 += B_11
+        matrix_mult_strassen(temp1, temp2, new_sz, temp3, cp); // temp3 = temp1 * temp2
+        matrix_add(c, new_sz, 0, sz, temp3, 0, 0, new_sz, new_sz); // C_21 += temp3
+        matrix_subtract(c, new_sz, new_sz, sz, temp3, 0, 0, new_sz, new_sz); // C_22 -= temp3
+
+        // M3
+        memset(temp1, 0, new_sz * new_sz * sizeof(int));
+        memset(temp2, 0, new_sz * new_sz * sizeof(int));
+        matrix_add(temp1, 0, 0, new_sz, a, 0, 0, sz, new_sz); // temp1 += A_11
+        matrix_add(temp2, 0, 0, new_sz, b, 0, new_sz, sz, new_sz); // temp2 += B_12
+        matrix_subtract(temp2, 0, 0, new_sz, b, new_sz, new_sz, sz, new_sz); // temp2 -= B_22
+        matrix_mult_strassen(temp1, temp2, new_sz, temp3, cp); // temp3 = temp1 * temp2
+        matrix_add(c, 0, new_sz, sz, temp3, 0, 0, new_sz, new_sz); // C_12 += temp3
+        matrix_add(c, new_sz, new_sz, sz, temp3, 0, 0, new_sz, new_sz); // C_22 += temp3
+
+        // M4
+        memset(temp1, 0, new_sz * new_sz * sizeof(int));
+        memset(temp2, 0, new_sz * new_sz * sizeof(int));
+        matrix_add(temp1, 0, 0, new_sz, a, new_sz, new_sz, sz, new_sz); // temp1 += A_22
+        matrix_add(temp2, 0, 0, new_sz, b, new_sz, 0, sz, new_sz); // temp2 += B_21
+        matrix_subtract(temp2, 0, 0, new_sz, b, 0, 0, sz, new_sz); // temp2 -= B_11
+        matrix_mult_strassen(temp1, temp2, new_sz, temp3, cp); // temp3 = temp1 * temp2
+        matrix_add(c, 0, 0, sz, temp3, 0, 0, new_sz, new_sz); // C_11 += temp3
+        matrix_add(c, new_sz, 0, sz, temp3, 0, 0, new_sz, new_sz); // C_21 += temp3
+
+        // M5
+        memset(temp1, 0, new_sz * new_sz * sizeof(int));
+        memset(temp2, 0, new_sz * new_sz * sizeof(int));
+        matrix_add(temp1, 0, 0, new_sz, a, 0, 0, sz, new_sz); // temp1 += A_11
+        matrix_add(temp1, 0, 0, new_sz, a, 0, new_sz, sz, new_sz); // temp1 += A_12
+        matrix_add(temp2, 0, 0, new_sz, b, new_sz, new_sz, sz, new_sz); // temp2 += B_22
+        matrix_mult_strassen(temp1, temp2, new_sz, temp3, cp); // temp3 = temp1 * temp2
+        matrix_subtract(c, 0, 0, sz, temp3, 0, 0, new_sz, new_sz); // C_11 -= temp3
+        matrix_add(c, 0, new_sz, sz, temp3, 0, 0, new_sz, new_sz); // C_12 += temp3
+
+        // M6
+        memset(temp1, 0, new_sz * new_sz * sizeof(int));
+        memset(temp2, 0, new_sz * new_sz * sizeof(int));
+        matrix_add(temp1, 0, 0, new_sz, a, new_sz, 0, sz, new_sz); // temp1 += A_21
+        matrix_subtract(temp1, 0, 0, new_sz, a, 0, 0, sz, new_sz); // temp1 -= A_11
+        matrix_add(temp2, 0, 0, new_sz, b, 0, 0, sz, new_sz); // temp2 += B_11
+        matrix_add(temp2, 0, 0, new_sz, b, 0, new_sz, sz, new_sz); // temp2 += B_12
+        matrix_mult_strassen(temp1, temp2, new_sz, temp3, cp); // temp3 = temp1 * temp2
+        matrix_add(c, new_sz, new_sz, sz, temp3, 0, 0, new_sz, new_sz); // C_22 += temp3
+
+        // M7
+        memset(temp1, 0, new_sz * new_sz * sizeof(int));
+        memset(temp2, 0, new_sz * new_sz * sizeof(int));
+        matrix_add(temp1, 0, 0, new_sz, a, 0, new_sz, sz, new_sz); // temp1 += A_12
+        matrix_subtract(temp1, 0, 0, new_sz, a, new_sz, new_sz, sz, new_sz); // temp1 -= A_22
+        matrix_add(temp2, 0, 0, new_sz, b, new_sz, 0, sz, new_sz); // temp2 += B_21
+        matrix_add(temp2, 0, 0, new_sz, b, new_sz, new_sz, sz, new_sz); // temp2 += B_22
+        matrix_mult_strassen(temp1, temp2, new_sz, temp3, cp); // temp3 = temp1 * temp2
+        matrix_add(c, 0, 0, sz, temp3, 0, 0, new_sz, new_sz); // C_11 += temp3
+
+        // free temporary matrices
+        free(temp1);
+        free(temp2);
+        free(temp3);
+    }
 }
 
 // fills square matrices a and b (of dimension sz) with random integer values
@@ -120,10 +232,15 @@ int main(int argc, char *argv[]) {
     }
 
     // multiply matrices and print diagonal of result
-    matrix_mult_naive(a, b, dim, c);
+    matrix_mult_strassen(a, b, dim, c, 64);
     for (int i = 0; i < dim; i++) {
         cout << *me(c, dim, i, i) << endl;
     }
+
+    // free matrices
+    free(a);
+    free(b);
+    free(c);
 
     return 0;
 }
